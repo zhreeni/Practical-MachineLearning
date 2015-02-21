@@ -1,0 +1,112 @@
+---
+title: "Practical Machine Learning Assignment1"
+output: html_document
+---
+##Statement
+In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. 
+They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+
+
+##Data
+The input data consisted of various movement measurments including acceleration components of the arms and pitch and roll orientations of the dumbell. More information can be found at the original data authors website linked to below.
+
+The data used here was downloaded from the course website, where the training and testing data were already partitioned:
+Training Data
+Testing Data
+
+The original data was taken from the originating study linked below. Please see the site and associated paper for more information. http://groupware.les.inf.puc-rio.br/har
+
+Our outcome variable is classe, a factor variable with 5 levels. For this data set, participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in 5 different fashions:
+
+* exactly according to the specification (Class A)
+* throwing the elbows to the front (Class B)
+* lifting the dumbbell only halfway (Class C)
+* lowering the dumbbell only halfway (Class D)
+* throwing the hips to the front (Class E)
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes.
+Prediction evaluations will be based on maximizing the accuracy and minimizing the out-of-sample error.
+
+
+
+##Tools & Libraries
+R is used for Prediction, and I take the use of 'caret' package for Modeling, it also provide unified interface to large colelction of Machine Learning Algoritms.
+
+So load the required packages, and for reproducibility use seed
+
+```{r}
+library(caret)
+library(Hmisc)
+library(knitr)
+set.seed(3456)
+```
+
+##Load the Data sets and do the cleaning & preprocessing
+Now read the data and do cleaning for missing values, which are not relevant as predictors. And do the same for empty strings too.
+
+The preprocess will include removing those features which are not contributing for the cause of our analysis. So I removed columns : X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, num_window. 
+
+And last but not least, convert the "classe" into a factor.
+
+So I end up with features having complete data. Now we have the data set is ready.
+  
+```{r}
+dtrain <- read.csv("pml-training.csv", stringsAsFactors=FALSE)
+dtest <- read.csv("pml-testing.csv", stringsAsFactors=FALSE)
+
+filterData <- function(idf) {
+  # Since we have lots of variables, remove any with NA's
+  # or have empty strings
+  idx.keep <- !sapply(idf, function(x) any(is.na(x)))
+  idf <- idf[, idx.keep]
+  idx.keep <- !sapply(idf, function(x) any(x==""))
+  idf <- idf[, idx.keep]
+  # Remove the columns that aren't the predictor variables
+  col.rm <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", 
+              "cvtd_timestamp", "new_window", "num_window")
+  idx.rm <- which(colnames(idf) %in% col.rm)
+  idf <- idf[, -idx.rm]
+  
+  return(idf)
+}
+
+dtrain <- filterData(dtrain)
+dtrain$classe <- factor(dtrain$classe)
+dtest <- filterData(dtest)
+
+```
+
+##Modelling 
+Here I leverage the caret for things like resampling & cross-validation. It also help to tune the model for best fit.
+I will try with two models and see the accuracy metric to choose one. And I use k-fold for cross-valodation, and the parameters are tuned.
+
+```{r}
+cvCtrl <- trainControl(method = "cv", number = 5, verboseIter = TRUE)
+m1 <- train(classe ~ ., data = dtrain, method = "rf", trControl = cvCtrl)
+m1
+m2 <- train(classe ~ ., data = dtrain, method = "knn", trControl = cvCtrl)
+m2
+```
+
+Now it seems that Random Forest is the best to classify for our data analysis. 
+
+```{r}
+acc.tab <- data.frame(Model=c("Random Forest", "KNN"),
+    Accuracy=c(round(max(head(m1$results)$Accuracy), 3),
+  round(max(head(m2$results)$Accuracy), 3)))
+
+kable(acc.tab)
+
+```
+
+Now evaluate the model on the testing set, and the out of sample error
+```{r}
+pdt2 <- predict(m1, dtest)
+dtest$classe <- pdt2
+confusionMatrix(pdt2, dtest$classe)
+```
+
+The out of sample error is zero in this case.
